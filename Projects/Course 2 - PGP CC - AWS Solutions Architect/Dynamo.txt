@@ -1,0 +1,117 @@
+import json
+import base64
+import re
+import boto3
+from botocore.exceptions import ClientError
+ 
+# Initialize DynamoDB client
+dynamodb = boto3.resource('dynamodb')
+table = dynamodb.Table('SimpleLearnProject2-Adult-Data-DynamoDB')  # Replace with your DynamoDB table name
+
+def lambda_handler(event, context):
+    print("Received event: " + json.dumps(event, indent=2))
+    
+    if 'Records' not in event:
+        print("Event does not contain 'Records' key.")
+        return {
+            'statusCode': 500,
+            'body': json.dumps("Event does not contain 'Records' key.")
+        }
+    
+    for record in event['Records']:
+        base64_encoded_data = record['kinesis']['data']
+        try:
+            decoded_bytes = base64.b64decode(base64_encoded_data)
+            decoded_str = decoded_bytes.decode('utf-8')
+            print(f"Decoded payload: {decoded_str}")
+
+            sanitized_data = sanitize_json(decoded_str)
+            if sanitized_data is None:
+                print("Sanitized data is None or still invalid.")
+                continue
+            
+            try:
+                data = json.loads(sanitized_data)
+                print(f"Parsed JSON data: {data}")
+                
+                if isinstance(data, dict):
+                    record_id = str(data.get('name', 'unknown'))
+                    age = int(data.get('age', 0))
+                    workclass = data.get('workclass', 'unknown')
+                    fnlwgt = int(data.get('fnlwgt', 0))
+                    education = data.get('education', 'unknown')
+                    education_num = int(data.get('education_num', 0))
+                    marital_status = data.get('marital_status', 'unknown')
+                    occupation = data.get('occupation', 'unknown')
+                    relationship = data.get('relationship', 'unknown')
+                    race = data.get('race', 'unknown')
+                    sex = data.get('sex', 'unknown')
+                    hours_per_week = int(data.get('hours_per_week', 0))
+                    native_country = data.get('native_country', 'unknown')
+                    income = data.get('income', 'unknown')
+
+                    table.put_item(
+                        Item={
+                            'record_id': record_id,
+                            'age': age,
+                            'workclass': workclass,
+                            'fnlwgt': fnlwgt,
+                            'education': education,
+                            'education_num': education_num,
+                            'marital_status': marital_status,
+                            'occupation': occupation,
+                            'relationship': relationship,
+                            'race': race,
+                            'sex': sex,
+                            'hours_per_week': hours_per_week,
+                            'native_country': native_country,
+                            'income': income
+                        }
+                    )
+                    print(f"Successfully put item: {record_id}")
+
+                else:
+                    print("Data is not in expected dictionary format.")
+
+            except json.JSONDecodeError as e:
+                print(f"Error decoding JSON data: {e}")
+            except ValueError as e:
+                print(f"Error converting data types: {e}")
+
+        except (base64.binascii.Error, UnicodeDecodeError) as e:
+            print(f"Error decoding Base64 or Unicode: {e}")
+        except ClientError as e:
+            print(f"Error putting item to DynamoDB: {e}")
+    
+    return {
+        'statusCode': 200,
+        'body': json.dumps('Data processed successfully')
+    }
+
+def sanitize_json(data):
+    """
+    Remove problematic control characters from JSON string.
+    """
+    try:
+        # Print original data for debugging
+        print(f"Original data: {data}")
+
+        # Remove problematic control characters
+        sanitized = re.sub(r'[\x00-\x1F\x7F]', '', data)
+        print(f"Sanitized data: {sanitized}")
+
+        # Check if sanitized data is still valid
+        if sanitized.strip() == "":
+            print("Sanitized data is empty after cleaning.")
+            return None
+        
+        # Handle potential truncations by ensuring data ends with a closing brace
+        if not sanitized.strip().endswith('}'):
+            print("Sanitized data does not end with '}' indicating potential truncation.")
+            # Attempt to handle truncation issues
+            sanitized = sanitized.rstrip() + '}'
+        
+        return sanitized
+    except Exception as e:
+        print(f"Error sanitizing JSON data: {e}")
+        return None

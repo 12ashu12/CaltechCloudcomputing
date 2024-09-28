@@ -1,0 +1,64 @@
+import json
+import base64
+import requests
+import boto3
+import io
+import csv
+
+# Initialize Kinesis client
+kinesis_client = boto3.client('kinesis')
+
+# Replace with your Kinesis Data Stream name
+KINESIS_STREAM_NAME = 'SimpleLearnProject2-AdultData-Awskinesis'
+
+def lambda_handler(event, context):
+    dataset_url = 'https://archive.ics.uci.edu/ml/machine-learning-databases/adult/adult.data'
+    
+    try:
+        # Fetch the dataset with a timeout to prevent long wait times
+        response = requests.get(dataset_url, timeout=10)
+        response.raise_for_status()
+    except requests.RequestException as e:
+        print(f"Request failed: {e}")
+        return {
+            'statusCode': 500,
+            'body': json.dumps('Failed to fetch dataset')
+        }
+
+    # Use io.StringIO to handle the CSV data in-memory
+    data = response.text
+    data_io = io.StringIO(data)
+    
+    # Use csv.reader to process the CSV data
+    reader = csv.reader(data_io, delimiter=',')
+    
+    # Batch size for sending records to Kinesis
+    batch_size = 500
+    records = []
+    for row in reader:
+        record = json.dumps(row)  # Convert row to JSON
+        records.append(record)
+        
+        # Send data to Kinesis stream in batches
+        if len(records) >= batch_size:
+            send_to_kinesis(records)
+            records = []
+    
+    # Send any remaining records
+    if records:
+        send_to_kinesis(records)
+    
+    return {
+        'statusCode': 200,
+        'body': json.dumps(f"Successfully processed {len(records)} records")
+    }
+
+def send_to_kinesis(records):
+    # Send records to Kinesis Data Stream in batches
+    for record in records:
+        partition_key = 'Adult'  # Adjust partition key as necessary
+        kinesis_client.put_record(
+            StreamName=KINESIS_STREAM_NAME,
+            Data=base64.b64encode(record.encode('utf-8')).decode('utf-8'),
+            PartitionKey=partition_key
+        )
