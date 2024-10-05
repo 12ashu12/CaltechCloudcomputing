@@ -1,0 +1,21 @@
+Steps for User Synchonization
+
+------------------------------
+
+1) Setting a VM with Active Directory Domain Services (ADDS)
+
+-- Create a VM
+
+-- Enable ADDS Role
+
+-- Configure ADDS
+
+-- Local ADDS Users and Groups
+
+2) Create Synchronization user in Entra ID
+
+-- Name, PWD, Global Admin Role
+
+3) Installing Entra Id Connect tool
+
+4) Configure Synchronization
